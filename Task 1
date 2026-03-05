@@ -1,0 +1,54 @@
+module freq_generator #(parameter DIV = 2)(
+    input clk,
+    input rst,
+    output reg out
+);
+
+reg [31:0] count;
+
+always @(posedge clk or posedge rst)
+begin
+    if(rst)
+    begin
+        count <= 0;
+        out <= 0;
+    end
+    else
+    begin
+        if(count == DIV-1)
+        begin
+            out <= ~out;
+            count <= 0;
+        end
+        else
+            count <= count + 1;
+    end
+end
+
+endmodule
+
+module tb_freq;
+
+reg clk;
+reg rst;
+
+wire out;
+
+freq_generator #(2) U1(
+    .clk(clk),
+    .rst(rst),
+    .out(out)
+);
+
+always #1 clk = ~clk;   // 1ns clock toggle
+
+initial
+begin
+    clk = 0;
+    rst = 1;
+    #5 rst = 0;
+
+    #200 $stop;
+end
+
+endmodule
