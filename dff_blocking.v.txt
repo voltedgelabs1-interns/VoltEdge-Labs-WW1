@@ -1,0 +1,12 @@
+// D Flip-Flop using blocking assignment (incorrect for sequential logic)
+module dff_blocking (
+    input  wire clk,
+    input  wire d,
+    output reg  q
+);
+
+    always @(posedge clk) begin
+        q = d;   // Blocking assignment (can cause race conditions)
+    end
+
+endmodule

@@ -1,0 +1,74 @@
+
+module logic_mux(
+    input  wire A,
+    input  wire B,
+    input  wire S,      
+    output wire AND_Y,
+    output wire OR_Y,
+    output wire XOR_Y,
+    output wire MUX_Y
+);
+
+   
+    assign AND_Y = A & B;
+
+   
+    assign OR_Y = A | B;
+
+   
+    assign XOR_Y = A ^ B;
+
+  
+    assign MUX_Y = (S == 1'b0) ? A : B;
+
+endmodule
+
+
+
+module tb_logic_mux;
+
+    reg A;
+    reg B;
+    reg S;
+
+    wire AND_Y;
+    wire OR_Y;
+    wire XOR_Y;
+    wire MUX_Y;
+
+    
+    logic_mux DUT (
+        .A(A),
+        .B(B),
+        .S(S),
+        .AND_Y(AND_Y),
+        .OR_Y(OR_Y),
+        .XOR_Y(XOR_Y),
+        .MUX_Y(MUX_Y)
+    );
+
+    initial begin
+
+        
+        $monitor("Time=%0t | A=%b B=%b S=%b | AND=%b OR=%b XOR=%b MUX=%b",
+                 $time, A, B, S, AND_Y, OR_Y, XOR_Y, MUX_Y);
+
+       
+
+        A = 0; B = 0; S = 0; #10;
+        A = 0; B = 0; S = 1; #10;
+
+        A = 0; B = 1; S = 0; #10;
+        A = 0; B = 1; S = 1; #10;
+
+        A = 1; B = 0; S = 0; #10;
+        A = 1; B = 0; S = 1; #10;
+
+        A = 1; B = 1; S = 0; #10;
+        A = 1; B = 1; S = 1; #10;
+
+        $finish;
+
+    end
+
+endmodule

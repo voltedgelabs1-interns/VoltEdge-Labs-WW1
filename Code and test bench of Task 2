@@ -1,0 +1,97 @@
+
+
+module mux4_behavioral (
+    input  wire I0,
+    input  wire I1,
+    input  wire I2,
+    input  wire I3,
+    input  wire S1,
+    input  wire S0,
+    output reg  Y
+);
+
+    always @(*) begin
+
+        case ({S1, S0})
+
+            2'b00: Y = I0;
+            2'b01: Y = I1;
+            2'b10: Y = I2;
+            2'b11: Y = I3;
+
+            default: Y = 1'b0;
+
+        endcase
+
+    end
+
+endmodule
+
+
+
+module tb_mux4;
+
+    reg I0, I1, I2, I3;
+    reg S1, S0;
+
+    wire Y_df;
+    wire Y_beh;
+
+    
+    mux4_dataflow DF (
+        .I0(I0), .I1(I1), .I2(I2), .I3(I3),
+        .S1(S1), .S0(S0),
+        .Y(Y_df)
+    );
+
+    
+    mux4_behavioral BEH (
+        .I0(I0), .I1(I1), .I2(I2), .I3(I3),
+        .S1(S1), .S0(S0),
+        .Y(Y_beh)
+    );
+
+    initial begin
+
+        $monitor("T=%0t | S1S0=%b%b | I0=%b I1=%b I2=%b I3=%b | DF=%b BEH=%b",
+                  $time, S1, S0, I0, I1, I2, I3, Y_df, Y_beh);
+
+    
+        I0=0; I1=1; I2=0; I3=1;
+
+        S1=0; S0=0; #10;
+        S1=0; S0=1; #10;
+        S1=1; S0=0; #10;
+        S1=1; S0=1; #10;
+
+        I0=1; I1=0; I2=1; I3=0;
+
+        S1=0; S0=0; #10;
+        S1=0; S0=1; #10;
+        S1=1; S0=0; #10;
+        S1=1; S0=1; #10;
+
+        $finish;
+
+    end
+
+endmodule
+
+
+module mux4_dataflow (
+    input  wire I0,
+    input  wire I1,
+    input  wire I2,
+    input  wire I3,
+    input  wire S1,
+    input  wire S0,
+    output wire Y
+);
+
+  
+    assign Y = (S1 == 1'b0 && S0 == 1'b0) ? I0 :
+               (S1 == 1'b0 && S0 == 1'b1) ? I1 :
+               (S1 == 1'b1 && S0 == 1'b0) ? I2 :
+                                          I3;
+
+endmodule
