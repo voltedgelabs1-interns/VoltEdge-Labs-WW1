@@ -24,3 +24,35 @@ Team members review the pull request, provide feedback, and suggest improvements
 
 ## Merge
 Once approved and all checks pass, the changes are merged into the main branch and become part of the project.
+
+
+## Internship Work – Week 5
+
+## Week 5 – OpenLane 4-Bit Adder Implementation
+
+### Objective
+To understand the RTL to GDSII flow using OpenLane.
+
+### Tools Used
+- OpenLane
+- Docker
+- KLayout
+- Ubuntu
+
+### Results
+
+#### RTL Code
+![RTL Code](week5/RTL_CODE.png)
+
+#### Critical Path
+![Critical Path](week5/openlane_criticalpath.png)
+
+#### Static Timing Analysis
+![STA1](week5/openlane_sta_1.png)
+![STA2](week5/openlane_sta_2.png)
+![STA3](week5/openlane_sta_3.png)
+![STA4](week5/openlane_sta_4.png)
+
+### Report
+Detailed report available here:  
+[Week 5 Report](week5/report.pdf)
