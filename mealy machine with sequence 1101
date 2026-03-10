@@ -1,0 +1,102 @@
+module seq(x,clock,clear,z);
+
+input x,clock,clear;
+output reg z;
+
+reg [1:0] ps,ns;
+parameter s0=0,s1=1,s2=2,s3=3;
+
+always@(posedge clock)
+begin
+if(clear)
+ps <= s0;
+else
+ps <= ns;
+end
+
+always @(x,ps)
+
+begin
+
+case(ps)
+
+s0 : begin
+z = x ? 0 : 0 ;
+ns = x ? s1 : s0;
+end
+
+s1 : begin
+z = x ? 0 : 0 ;
+ns = x ? s2 : s0;
+end
+
+s2 : begin
+z = x ? 0 : 0 ;
+ns = x ? s2 : s3;
+end
+
+
+s3 : begin
+z = x ? 1 : 0 ;
+ns = x ? s1 : s0;
+end
+
+default : ns = s0;
+
+endcase
+
+end
+
+endmodule
+
+//TESTBENCH
+
+module testbench;
+
+reg x,clock,clear;
+wire z;
+
+seq DUT(x,clock,clear,z);
+
+always #5 clock = ~clock ;
+
+initial
+begin
+
+clear = 1;
+clock = 0;
+
+#2 clear = 0;
+
+$dumpfile("seq.vcd");
+$dumpvars(0,testbench);
+
+#10 x = 0;
+#10 x = 1;
+#10 x = 0;
+#10 x = 1;
+#10 x = 1;
+#10 x = 0;
+#10 x = 1;
+#10 x = 0;
+#10 x = 1;
+#10 x = 1;
+#10 x = 1;
+#10 x = 0;
+#10 x = 1;
+#10 x = 0;
+#10 x = 1;
+#10 x = 0;
+#10 x = 1;
+#10 x = 1;
+#10 x = 0;
+#10 x = 1;
+#10 x = 0;
+#100 $finish;
+
+end
+
+endmodule
+
+
+

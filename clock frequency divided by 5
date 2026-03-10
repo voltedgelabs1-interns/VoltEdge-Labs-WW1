@@ -1,0 +1,88 @@
+module freq_by_5(clock,count,clr,y);
+input clock , clr ;
+output [2:0] count ;
+wire t1;
+output y;
+
+counter1 m1(clock,count,clr);
+dff1 m2(count[1],t1,clock);
+or g1(y,count[1],t1);
+
+endmodule
+
+module counter1(clock,count,clr);
+
+input clock;
+output reg [2:0] count;
+input clr;
+always@(posedge clock)
+begin
+if(clr)
+count=0;
+else if(count == 4)
+count = 0;
+else
+count = count + 1;
+end
+
+endmodule
+
+
+module dff1(d,q,clock);
+
+input d,clock;
+
+output reg q;
+
+always@(negedge clock)
+begin
+
+q = d;
+
+end
+
+endmodule
+
+
+//testbench
+
+module testbench;
+
+reg  clr, clock ; wire [2:0] count ;
+wire y;
+
+freq_by_5 DUT(.clock(clock),.count(count),.clr(clr),.y(y));
+
+
+always
+begin
+#5 clock = ~clock;
+
+end
+
+initial
+begin
+clock = 0;
+#2 clr = 1;
+#5 clr = 0;
+
+$dumpfile("freq.vcd");
+$dumpvars(0,testbench);
+#200 $finish ;
+
+end
+
+endmodule
+
+
+
+
+
+
+
+
+
+
+
+
+
