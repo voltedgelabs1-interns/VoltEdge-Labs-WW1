@@ -1,0 +1,14 @@
+Startpoint: reg1
+Endpoint: reg2
+Path delay: 2.3ns
+Slack: -0.2ns
+
+Startpoint: reg3
+Endpoint: reg4
+Path delay: 1.8ns
+Slack: 0.1ns
+
+Startpoint: reg5
+Endpoint: reg6
+Path delay: 2.7ns
+Slack: -0.32ns
