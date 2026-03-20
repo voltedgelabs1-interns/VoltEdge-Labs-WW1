@@ -1,0 +1,32 @@
+============================================================
+     AI TIMING ANALYZER - SUMMARY REPORT
+============================================================
+Total paths analyzed  : 2
+Total violations      : 1
+Worst slack (WNS)     : -0.280 ns
+Best slack            : 0.130 ns
+Total negative slack  : -0.280 ns
+
+Setup violations      : 1
+Hold violations       : 0
+In-to-reg violations  : 0
+Reg-to-out violations : 0
+Deep logic paths      : 1
+Worst case paths      : 0
+Max delay violations  : 1
+Min delay violations  : 0
+False path suspects   : 0
+
+------------------------------------------------------------
+VIOLATION DETAILS
+------------------------------------------------------------
+
+[1] setup_violation | deep_logic_path | max_delay_violation
+    Startpoint  : _59_ (rising edge-triggered flip-flop clocked by clk)
+    Endpoint    : _49_ (rising edge-triggered flip-flop clocked by clk)
+    Slack       : -0.280 ns  (VIOLATED)
+    Check type  : SETUP
+    Logic depth : 8 cells
+    Max delay   : 0.360 ns at _38_/Y (sky130_fd_sc_hd__o311ai_0)
+
+============================================================
