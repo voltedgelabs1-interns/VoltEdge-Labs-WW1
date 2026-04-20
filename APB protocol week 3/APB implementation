@@ -1,0 +1,203 @@
+//DESIGN FILE
+module apb(clk, rst, paddr, pwrite, pwdata, pen, psel, pready, prdata);
+
+  // FSM State Encoding 
+  parameter idle   = 2'b00,   // Bus idle, no transfer in progress
+            setup  = 2'b01,   // PSEL asserted, PENABLE not yet asserted
+            access = 2'b10;   // PSEL + PENABLE both asserted — data transfer
+  // Bus Width Parameters (override at instantiation for different widths)
+  parameter datawidth = 32;   // Width of data bus in bits
+  parameter addwidth  = 32;   // Width of address bus / depth of memory array
+  //global signals
+  input clk;   
+  input rst;   
+  // APB Bus Signals 
+  input pen;                       // qualifies the access phase
+  input psel;                      //  selects this slave
+  input pwrite;                    //  1: write transfer, 0: read transfer
+  input [datawidth-1:0] pwdata;    //  write data from master
+  input [addwidth-1:0]  paddr;     //  address driven by the master
+
+  output pready;                           //  slave ready 
+  output reg [datawidth-1:0] prdata;       //  read data back to master
+  // Internal Registers
+  reg [1:0] apb_st;                        // Current FSM state register
+  reg [1:0] nxt_st;                        // Next FSM state 
+  reg busy = 0;                            // Busy flag — tie to 1 to insert wait states
+
+  // Internal memory array:
+  reg [datawidth-1:0] mem [0:addwidth-1];
+
+  // FSM – Sequential Block (State Register)
+  always @(posedge clk or negedge rst) begin
+    if (!rst)
+      apb_st <= idle;       // Reset to IDLE state on active-low reset
+    else
+      apb_st <= nxt_st;     // Advance to next state each clock cycle
+  end
+
+  // FSM – Combinational Block (Next-State Logic)
+  always @(*) begin
+    case (apb_st)
+
+      // IDLE: 
+      idle: begin
+        if (psel == 1 && pen == 0) nxt_st = setup;
+        else                       nxt_st = idle;
+      end
+      // SETUP: 
+      setup: begin
+        if      (psel == 1 && pen == 1) nxt_st = access; // PENABLE asserted → proceed
+        else if (psel == 1 && pen == 0) nxt_st = setup;  // Still waiting for PENABLE
+        else                            nxt_st = idle;   // PSEL dropped → abort
+      end
+
+      // ACCESS:
+      access: begin
+        if      (psel == 1 && pen == 1) nxt_st = access; // Burst / wait-state continuation
+        else if (psel == 1 && pen == 0) nxt_st = setup;  // Back-to-back transfer
+        else                            nxt_st = idle;   // Transfer complete, bus released
+      end
+  // Memory Access Block – Read & Write Logic
+  always @(posedge clk or negedge rst) begin
+    if (!rst) begin
+      prdata <= {datawidth{1'b0}};      // Clear read-data bus on reset
+
+    end 
+    else begin
+      // Enter this block only during a valid ACCESS phase handshake
+      if (apb_st == access && psel == 1 && pen == 1 && pready == 1) begin
+
+        if (pwrite == 1) begin
+          // WRITE operation: 
+          mem[paddr] <= pwdata;
+
+        end else begin
+          // READ operation: 
+           prdata <= mem[paddr];
+
+        end
+      end
+    end
+  end
+  // PREADY 
+  assign pready = (busy == 0) ? 1'b1 : 1'b0;
+
+endmodule
+
+//TESTBENCH
+module apb_tb;
+
+  
+  // Bus Width Parameters
+  parameter datawidth = 32;   // Data bus width in bits
+  parameter addwidth  = 32;   // Address bus width in bits
+
+  // Testbench Driven Signals (APB Master side — driven by TB)
+  
+  reg clk;                       // System clock
+  reg rst;                       // Active-LOW 
+  reg pen;                       // asserted in the ACCESS phase
+  reg psel;                      //  selects the slave
+  reg pwrite;                    //  1 = write, 0 = read
+  reg [datawidth-1:0] pwdata;    //  data to write to the slave
+  reg [addwidth-1:0]  paddr;     //  target address for the transfer
+
+  wire pready;                   //  slave signals it is ready (1 = ready)
+  wire [datawidth-1:0] prdata;   //  data read back from the slave
+
+  
+  // DUT Instantiation
+  
+  apb ao(clk, rst, paddr, pwrite, pwdata, pen, psel, pready, prdata);
+
+  
+  initial begin
+    clk = 0;
+    forever #20 clk = ~clk;
+  end
+
+
+  initial begin
+    rst = 1'b0;       // Assert reset at time 0
+    #15 rst = 1'b1;   // De-assert reset at t=15 ns 
+  end
+
+  
+  // Task: read
+  task read(input integer count);
+    integer i;
+    for (i = 0; i < count; i = i + 1) begin
+
+      //SETUP Phase 
+      @(negedge clk);
+      psel   = 1;       // Select this slave
+      paddr  = i;       // Present target address
+      pwrite = 0;       // Indicate a READ transfer
+      pen    = 0;       // PENABLE low → SETUP phase
+
+      // ACCESS Phase
+      @(negedge clk);
+      pen = 1;          // PENABLE high → ACCESS phase (data transfer begins)
+
+      @(negedge clk);
+      $display("READ : Address = %0d | Data = 0x%0h | PREADY = %b", paddr, prdata, pready);
+      psel = 0;         // De-assert PSEL → bus returns to IDLE
+      pen  = 0;         // Clear PENABLE
+    end
+  endtask
+
+  
+  // Task: write
+    task write(input integer count);
+    integer i;
+    for (i = 0; i < count; i = i + 1) begin
+
+      // SETUP Phase 
+      @(negedge clk);
+      psel   = 1;           // Select this slave
+      paddr  = i;           // Present target address
+      pwrite = 1;           // Indicate a WRITE transfer
+      pwdata = $random;     // Random 32-bit payload for this location
+      pen    = 0;           // PENABLE low → SETUP phase
+
+      // ACCESS Phase 
+      @(negedge clk);
+      pen = 1;              // PENABLE high → ACCESS phase (write is committed)
+
+      // Log & Release 
+      @(negedge clk);
+      $display("WRITE: Address = %0d | Data = 0x%0h | PREADY = %b", paddr, pwdata, pready);
+      psel   = 0;           // De-assert PSEL → bus returns to IDLE
+      pen    = 0;           // Clear PENABLE
+    end
+  endtask
+
+ 
+  initial begin
+    // -- Initialisation 
+    psel   = 0;
+    pen    = 0;
+    pwrite = 0;
+    paddr  = 0;
+    pwdata = 0;
+
+    // -- Wait for reset to clear 
+    repeat(3) @(negedge clk);
+
+    // -- Write Pass 
+    $display("--- Starting APB Write Transactions ---");
+    write(3);
+
+    // -- Idle Gap 
+    repeat(2) @(negedge clk);
+
+    // -- Read Pass 
+    $display("--- Starting APB Read Transactions ---");
+    read(3);
+
+    
+    #100 $finish;
+  end
+
+endmodule

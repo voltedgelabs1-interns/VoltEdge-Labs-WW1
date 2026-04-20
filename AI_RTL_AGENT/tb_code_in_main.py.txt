@@ -1,0 +1,52 @@
+def generate_testbench(rtl_code, module_name):
+    """Agent 2: Generates the verification environment with strict naming."""
+    print(f"☁️  [Agent 2] Writing Testbench for '{module_name}'...")
+    
+    # We are now extra-strict about the filename in the prompt
+    tb_prompt = f"""
+    You are a Verification Engineer. Write a Verilog testbench for this module:
+    {rtl_code}
+    
+    MANDATORY RULES:
+    1. Testbench module name: {module_name}_tb
+    2. YOU MUST include: $dumpfile("{module_name}.vcd");
+    3. YOU MUST include: $dumpvars(0, {module_name}_tb);
+    4. Provide clock (10ns period) and active-low reset logic.
+    5. Output ONLY raw Verilog code.
+    """
+    try:
+        response = client.models.generate_content(
+            model='gemini-3.1-flash-lite-preview', 
+            contents=tb_prompt
+        )
+        return response.text.replace("```verilog", "").replace("```", "").strip()
+    except Exception as e:
+        print(f"❌ API Error (TB): {e}")
+        return None
+
+
+#run inside RUN PIPELINE
+
+    # 2. Simulate
+    # This creates the .vcd file. Most simulators put it in the CWD (project root).
+    print(f"🚀 Running simulation...")
+    subprocess.run(["vvp", out_file], cwd=proj_name, capture_output=True)
+
+    # 3. Aggressive Search for the VCD
+    # This looks in the root, hdl/, and sim/ folders for ANY .vcd file
+    vcd_search_pattern = os.path.join(proj_name, "**", "*.vcd")
+    vcd_files = glob.glob(vcd_search_pattern, recursive=True)
+
+    if vcd_files:
+        # Sort by modification time to get the most recently created VCD
+        latest_vcd = max(vcd_files, key=os.path.getmtime)
+        print(f"📈 Found waveform: {latest_vcd}")
+        print(f"📈 Opening GTKWave...")
+        subprocess.run(["gtkwave", latest_vcd])
+    else:
+        # Debugging: If no VCD is found, let's see what files ARE there
+        print(f"⚠️ No VCD file found anywhere in {proj_name}!")
+        print("Existing files in project:")
+        for root, dirs, files in os.walk(proj_name):
+            for file in files:
+                print(f"  - {os.path.join(root, file)}")

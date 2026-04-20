@@ -1,0 +1,105 @@
+$date
+	Wed Mar 18 11:16:09 2026
+$end
+$version
+	Icarus Verilog
+$end
+$timescale
+	1s
+$end
+$scope module alu_tb $end
+$var wire 16 ! result [15:0] $end
+$var wire 1 " carry_out $end
+$var reg 16 # a [15:0] $end
+$var reg 16 $ b [15:0] $end
+$var reg 1 % clk $end
+$var reg 2 & opcode [1:0] $end
+$var reg 1 ' rstn $end
+$scope module dut $end
+$var wire 16 ( a [15:0] $end
+$var wire 16 ) b [15:0] $end
+$var wire 1 % clk $end
+$var wire 2 * opcode [1:0] $end
+$var wire 1 ' rstn $end
+$var reg 17 + alu_out [16:0] $end
+$var reg 1 " carry_out $end
+$var reg 16 , result [15:0] $end
+$upscope $end
+$upscope $end
+$enddefinitions $end
+#0
+$dumpvars
+b0 ,
+b0 +
+b0 *
+b0 )
+b0 (
+0'
+b0 &
+0%
+b0 $
+b0 #
+0"
+b0 !
+$end
+#5
+1%
+#10
+0%
+#15
+1%
+#20
+b10000 +
+0%
+b1 $
+b1 )
+b1111 #
+b1111 (
+1'
+#25
+b10000 !
+b10000 ,
+1%
+#30
+b1111 +
+0%
+b1 &
+b1 *
+b10000 #
+b10000 (
+#35
+b1111 !
+b1111 ,
+1%
+#40
+b0 +
+0%
+b10 &
+b10 *
+b101010101010101 $
+b101010101010101 )
+b1010101010101010 #
+b1010101010101010 (
+#45
+b0 !
+b0 ,
+1%
+#50
+b1111111111111111 +
+0%
+b11 &
+b11 *
+#55
+b1111111111111111 !
+b1111111111111111 ,
+1%
+#60
+0%
+#65
+1%
+#70
+0%
+#75
+1%
+#80
+0%
