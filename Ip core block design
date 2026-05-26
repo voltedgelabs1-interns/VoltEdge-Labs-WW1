@@ -1,0 +1,859 @@
+module apb_master_slave_interface #(
+    parameter ADDR_WIDTH = 32,
+    parameter DATA_WIDTH = 32
+) (
+    input wire                          clk,
+    input wire                          rstn,
+    
+    // Master Interface (To local CPU/Processor)
+    input wire                          m_req,
+    input wire                          m_write,
+    input wire [ADDR_WIDTH-1:0]         m_addr,
+    input wire [DATA_WIDTH-1:0]         m_wdata,
+    output reg                          m_ready,
+    output reg [DATA_WIDTH-1:0]         m_rdata,
+
+    // APB Bus Interface
+    output reg                          pclk,
+    output reg                          presetn,
+    output reg [ADDR_WIDTH-1:0]         paddr,
+    output reg                          psel,
+    output reg                          penable,
+    output reg                          pwrite,
+    output reg [DATA_WIDTH-1:0]         pwdata,
+    input wire                          pready,
+    input wire [DATA_WIDTH-1:0]         prdata
+);
+
+    // State Encoding
+    localparam IDLE    = 2'b00;
+    localparam SETUP   = 2'b01;
+    localparam ACCESS  = 2'b10;
+
+    reg [1:0] state, next_state;
+
+    // Clock and Reset mirroring
+    always @(*) begin
+        pclk    = clk;
+        presetn = rstn;
+    end
+
+    // Sequential State Logic
+    always @(posedge clk or negedge rstn) begin
+        if (!rstn) begin
+            state <= IDLE;
+        end else begin
+            state <= next_state;
+        end
+    end
+
+    // Next State and Output Logic
+    always @(*) begin
+        // Default assignments to prevent latches
+        next_state = state;
+        m_ready    = 1'b0;
+        m_rdata    = {DATA_WIDTH{1'b0}};
+        psel       = 1'b0;
+        penable    = 1'b0;
+        paddr      = {ADDR_WIDTH{1'b0}};
+        pwrite     = 1'b0;
+        pwdata     = {DATA_WIDTH{1'b0}};
+
+        case (state)
+            IDLE: begin
+                if (m_req) begin
+                    next_state = SETUP;
+                end
+            end
+
+            SETUP: begin
+                psel    = 1'b1;
+                paddr   = m_addr;
+                pwrite  = m_write;
+                pwdata  = m_wdata;
+                next_state = ACCESS;
+            end
+
+            ACCESS: begin
+                psel    = 1'b1;
+                penable = 1'b1;
+                paddr   = m_addr;
+                pwrite  = m_write;
+                pwdata  = m_wdata;
+                
+                if (pready) begin
+                    m_ready = 1'b1;
+                    m_rdata = prdata;
+                    next_state = IDLE;
+                end else begin
+                    next_state = ACCESS;
+                end
+            end
+
+            default: next_state = IDLE;
+        endcase
+    end
+
+endmodule
+//this  is API_ Master, Slave Interface
+
+module axi4_full_basic #(
+    parameter DATA_WIDTH = 32,
+    parameter ADDR_WIDTH = 32,
+    parameter ID_WIDTH   = 4
+) (
+    input wire clk,
+    input wire rstn,
+
+    // Write Address Channel
+    output reg                         awready,
+    input  wire                        awvalid,
+    input  wire [ADDR_WIDTH-1:0]       awaddr,
+    input  wire [ID_WIDTH-1:0]         awid,
+    input  wire [7:0]                  awlen,
+    input  wire [2:0]                  awsize,
+
+    // Write Data Channel
+    output reg                         wready,
+    input  wire                        wvalid,
+    input  wire [DATA_WIDTH-1:0]       wdata,
+    input  wire [(DATA_WIDTH/8)-1:0]   wstrb,
+    input  wire                        wlast,
+
+    // Write Response Channel
+    input  wire                        bready,
+    output reg                         bvalid,
+    output reg  [1:0]                  bresp,
+    output reg  [ID_WIDTH-1:0]         bid,
+
+    // Read Address Channel
+    output reg                         arready,
+    input  wire                        arvalid,
+    input  wire [ADDR_WIDTH-1:0]       araddr,
+    input  wire [ID_WIDTH-1:0]         arid,
+
+    // Read Data Channel
+    input  wire                        rready,
+    output reg                         rvalid,
+    output reg  [DATA_WIDTH-1:0]       rdata,
+    output reg  [1:0]                  rresp,
+    output reg                         rlast,
+    output reg  [ID_WIDTH-1:0]         rid
+);
+
+    // Simple AXI4 FSM States
+    localparam IDLE = 1'b0;
+    localparam BUSY = 1'b1;
+
+    reg write_state;
+    reg read_state;
+
+    // Write Address & Data Logic
+    always @(posedge clk or negedge rstn) begin
+        if (!rstn) begin
+            awready <= 1'b0;
+            wready  <= 1'b0;
+            bvalid  <= 1'b0;
+            write_state <= IDLE;
+        end else begin
+            case (write_state)
+                IDLE: begin
+                    awready <= 1'b1;
+                    wready  <= 1'b1;
+                    bvalid  <= 1'b0;
+                    if (awvalid && wvalid) begin
+                        write_state <= BUSY;
+                        bid         <= awid;
+                    end
+                end
+                BUSY: begin
+                    awready <= 1'b0;
+                    wready  <= 1'b0;
+                    if (wlast) begin
+                        bvalid      <= 1'b1;
+                        if (bready) begin
+                            write_state <= IDLE;
+                        end
+                    end
+                end
+            endcase
+        end
+    end
+
+    // Default Write Response
+    always @(*) begin
+        bresp = 2'b00; // OKAY
+    end
+
+    // Read Address & Data Logic
+    always @(posedge clk or negedge rstn) begin
+        if (!rstn) begin
+            arready <= 1'b0;
+            rvalid  <= 1'b0;
+            read_state <= IDLE;
+        end else begin
+            case (read_state)
+                IDLE: begin
+                    arready <= 1'b1;
+                    rvalid  <= 1'b0;
+                    if (arvalid) begin
+                        read_state <= BUSY;
+                        rid        <= arid;
+                    end
+                end
+                BUSY: begin
+                    arready <= 1'b0;
+                    rvalid  <= 1'b1;
+                    rlast   <= 1'b1;
+                    if (rready) begin
+                        read_state <= IDLE;
+                    end
+                end
+            endcase
+        end
+    end
+
+    // Default Read Data
+    always @(*) begin
+        rdata = {DATA_WIDTH{1'b0}};
+        rresp = 2'b00;
+    end
+
+endmodule
+//this is axi4_full_basic code
+
+`timescale 1ns/1ps
+
+module uart_top #(
+    parameter CLK_FREQ  = 50_000_000,
+    parameter BAUD_RATE = 115200
+)(
+    input  wire clk,
+    input  wire rst_n,
+
+    input  wire rx_in,
+    output reg  tx_out,
+
+    input  wire [7:0] data_in,
+    input  wire data_valid,
+    output reg  tx_busy,
+
+    output reg [7:0] data_out,
+    output reg data_ready
+);
+
+    // -------------------------------
+    // Baud Rate Generator
+    // -------------------------------
+    localparam BAUD_TICK_LIMIT = CLK_FREQ / BAUD_RATE;
+
+    reg [$clog2(BAUD_TICK_LIMIT)-1:0] tx_baud_cnt, rx_baud_cnt;
+
+    // -------------------------------
+    // RX Synchronizer (Metastability fix)
+    // -------------------------------
+    reg rx_sync1, rx_sync2;
+
+    always @(posedge clk) begin
+        rx_sync1 <= rx_in;
+        rx_sync2 <= rx_sync1;
+    end
+
+    // -------------------------------
+    // TX Section
+    // -------------------------------
+    localparam TX_IDLE  = 0,
+               TX_START = 1,
+               TX_DATA  = 2,
+               TX_STOP  = 3;
+
+    reg [1:0] tx_state;
+    reg [2:0] tx_bit_cnt;
+    reg [7:0] tx_shift_reg;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            tx_state     <= TX_IDLE;
+            tx_out       <= 1'b1;
+            tx_bit_cnt   <= 0;
+            tx_shift_reg <= 0;
+            tx_baud_cnt  <= 0;
+            tx_busy      <= 0;
+        end else begin
+
+            case (tx_state)
+
+                TX_IDLE: begin
+                    tx_out <= 1'b1;
+                    tx_bit_cnt <= 0;
+                    tx_baud_cnt <= 0;
+
+                    if (data_valid) begin
+                        tx_shift_reg <= data_in;
+                        tx_state <= TX_START;
+                        tx_busy <= 1'b1;
+                    end
+                end
+
+                TX_START: begin
+                    tx_out <= 1'b0;
+
+                    if (tx_baud_cnt == BAUD_TICK_LIMIT-1) begin
+                        tx_baud_cnt <= 0;
+                        tx_state <= TX_DATA;
+                    end else
+                        tx_baud_cnt <= tx_baud_cnt + 1;
+                end
+
+                TX_DATA: begin
+                    tx_out <= tx_shift_reg[tx_bit_cnt];
+
+                    if (tx_baud_cnt == BAUD_TICK_LIMIT-1) begin
+                        tx_baud_cnt <= 0;
+
+                        if (tx_bit_cnt == 7)
+                            tx_state <= TX_STOP;
+
+                        tx_bit_cnt <= tx_bit_cnt + 1;
+                    end else
+                        tx_baud_cnt <= tx_baud_cnt + 1;
+                end
+
+                TX_STOP: begin
+                    tx_out <= 1'b1;
+
+                    if (tx_baud_cnt == BAUD_TICK_LIMIT-1) begin
+                        tx_baud_cnt <= 0;
+                        tx_state <= TX_IDLE;
+                        tx_busy <= 1'b0;
+                    end else
+                        tx_baud_cnt <= tx_baud_cnt + 1;
+                end
+
+            endcase
+        end
+    end
+
+    // -------------------------------
+    // RX Section
+    // -------------------------------
+    localparam RX_IDLE  = 0,
+               RX_START = 1,
+               RX_DATA  = 2,
+               RX_STOP  = 3;
+
+    reg [1:0] rx_state;
+    reg [2:0] rx_bit_cnt;
+    reg [7:0] rx_shift_reg;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            rx_state      <= RX_IDLE;
+            rx_bit_cnt    <= 0;
+            rx_shift_reg  <= 0;
+            rx_baud_cnt   <= 0;
+            data_out      <= 0;
+            data_ready    <= 0;
+        end else begin
+
+            data_ready <= 0; // default
+
+            case (rx_state)
+
+                RX_IDLE: begin
+                    rx_bit_cnt <= 0;
+
+                    if (rx_sync2 == 0) begin // start bit detected
+                        rx_state <= RX_START;
+                        rx_baud_cnt <= 0;
+                    end
+                end
+
+                RX_START: begin
+                    if (rx_baud_cnt == (BAUD_TICK_LIMIT/2)) begin
+                        // sample middle of start bit
+                        if (rx_sync2 == 0) begin
+                            rx_baud_cnt <= 0;
+                            rx_state <= RX_DATA;
+                        end else
+                            rx_state <= RX_IDLE; // false start
+                    end else
+                        rx_baud_cnt <= rx_baud_cnt + 1;
+                end
+
+                RX_DATA: begin
+                    if (rx_baud_cnt == BAUD_TICK_LIMIT-1) begin
+                        rx_baud_cnt <= 0;
+
+                        rx_shift_reg[rx_bit_cnt] <= rx_sync2;
+
+                        if (rx_bit_cnt == 7)
+                            rx_state <= RX_STOP;
+
+                        rx_bit_cnt <= rx_bit_cnt + 1;
+                    end else
+                        rx_baud_cnt <= rx_baud_cnt + 1;
+                end
+
+                RX_STOP: begin
+                    if (rx_baud_cnt == BAUD_TICK_LIMIT-1) begin
+                        rx_baud_cnt <= 0;
+
+                        if (rx_sync2 == 1) begin // valid stop bit
+                            data_out   <= rx_shift_reg;
+                            data_ready <= 1'b1;
+                        end
+
+                        rx_state <= RX_IDLE;
+                    end else
+                        rx_baud_cnt <= rx_baud_cnt + 1;
+                end
+
+            endcase
+        end
+    end
+
+endmodule
+// this is uart code
+`timescale 1ns/1ps
+
+module i2c_master #(
+    parameter CLK_DIV = 250  // System Clock / (4 * SCL Frequency)
+)(
+    input  wire clk,
+    input  wire rst_n,
+
+    input  wire start,
+    input  wire rw,            // 0 = write, 1 = read
+    input  wire [6:0] addr,
+    input  wire [7:0] data_in,
+    input  wire last_byte,     // control: NACK on last read byte
+
+    output reg  [7:0] data_out,
+    output reg  busy,
+    output reg  done,
+    output reg  ack_error,
+    output reg  lost_arbitration,
+
+    inout  wire sda,
+    inout  wire scl
+);
+
+    // -------------------------
+    // State Definitions
+    // -------------------------
+    localparam IDLE  = 0,
+               START = 1,
+               ADDR  = 2,
+               ACK1  = 3,
+               DATA  = 4,
+               ACK2  = 5,
+               STOP  = 6;
+
+    // -------------------------
+    // Phase Definitions
+    // -------------------------
+    localparam PH_SETUP  = 2'd0; // change SDA while SCL high
+    localparam PH_RISE   = 2'd1; // release SCL, wait for scl_in==1
+    localparam PH_SAMPLE = 2'd2; // sample SDA while SCL high
+    localparam PH_FALL   = 2'd3; // drive SCL low
+
+    // -------------------------
+    // Open-Drain & Synchronization
+    // -------------------------
+    reg sda_drive_low; 
+    reg scl_drive_low;
+    reg [2:0] sda_sync, scl_sync;
+
+    assign sda = (sda_drive_low) ? 1'b0 : 1'bz;
+    assign scl = (scl_drive_low) ? 1'b0 : 1'bz;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            sda_sync <= 3'b111;
+            scl_sync <= 3'b111;
+        end else begin
+            sda_sync <= {sda_sync[1:0], sda};
+            scl_sync <= {scl_sync[1:0], scl};
+        end
+    end
+    
+    wire sda_in = sda_sync[2];
+    wire scl_in = scl_sync[2];
+
+    // -------------------------
+    // Timing Generator
+    // -------------------------
+    reg [15:0] clk_cnt;
+    reg [1:0]  phase; 
+    wire phase_tick = (clk_cnt >= (CLK_DIV-1));
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            clk_cnt <= 0;
+            phase   <= PH_SETUP;
+        end else if (busy) begin
+            if (phase_tick) begin
+                clk_cnt <= 0;
+                phase   <= phase + 1;
+            end else begin
+                clk_cnt <= clk_cnt + 1;
+            end
+        end else begin
+            clk_cnt <= 0;
+            phase   <= PH_SETUP;
+        end
+    end
+
+    // -------------------------
+    // Main FSM
+    // -------------------------
+    reg [2:0] state;
+    reg [3:0] bit_cnt;
+    reg [7:0] shift_reg;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            state <= IDLE;
+            busy <= 0;
+            done <= 0;
+            ack_error <= 0;
+            lost_arbitration <= 0;
+            sda_drive_low <= 0;
+            scl_drive_low <= 0;
+            data_out <= 0;
+            bit_cnt <= 0;
+        end else begin
+            done <= 0;
+
+            case (state)
+                IDLE: begin
+                    busy <= 0;
+                    ack_error <= 0;
+                    lost_arbitration <= 0;
+                    sda_drive_low <= 0;
+                    scl_drive_low <= 0;
+                    if (start && sda_in && scl_in) begin
+                        busy <= 1;
+                        shift_reg <= {addr, rw};
+                        state <= START;
+                    end
+                end
+
+                START: begin
+                    if (phase_tick) begin
+                        case (phase)
+                            PH_SETUP: sda_drive_low <= 1; // SDA low while SCL high
+                            PH_FALL:  scl_drive_low <= 1; // drive SCL low
+                            PH_FALL:  state <= ADDR; bit_cnt <= 7;
+                        endcase
+                    end
+                end
+
+                ADDR: begin
+                    if (phase_tick) begin
+                        case (phase)
+                            PH_SETUP: begin
+                                sda_drive_low <= (shift_reg[bit_cnt] == 1'b0);
+                                // arbitration check when sending '1'
+                                if (shift_reg[bit_cnt] && (sda_in == 0) && scl_in)
+                                    lost_arbitration <= 1;
+                            end
+                            PH_RISE:  scl_drive_low <= 0; // release SCL
+                            PH_SAMPLE: ; // sample not needed here
+                            PH_FALL: begin
+                                scl_drive_low <= 1;
+                                if (bit_cnt == 0) state <= ACK1;
+                                else bit_cnt <= bit_cnt - 1;
+                            end
+                        endcase
+                    end
+                end
+
+                ACK1: begin
+                    if (phase_tick) begin
+                        case (phase)
+                            PH_SETUP: sda_drive_low <= 0; // release SDA
+                            PH_RISE:  scl_drive_low <= 0;
+                            PH_SAMPLE: ack_error <= sda_in; // sample ACK
+                            PH_FALL: begin
+                                scl_drive_low <= 1;
+                                shift_reg <= (rw) ? 8'hFF : data_in;
+                                bit_cnt <= 7;
+                                state <= DATA;
+                            end
+                        endcase
+                    end
+                end
+
+                DATA: begin
+                    if (phase_tick) begin
+                        case (phase)
+                            PH_SETUP: begin
+                                if (rw) sda_drive_low <= 0; // release for read
+                                else begin
+                                    sda_drive_low <= (shift_reg[bit_cnt] == 1'b0);
+                                    if (shift_reg[bit_cnt] && (sda_in == 0) && scl_in)
+                                        lost_arbitration <= 1;
+                                end
+                            end
+                            PH_RISE:  scl_drive_low <= 0;
+                            PH_SAMPLE: if (rw) shift_reg[bit_cnt] <= sda_in;
+                            PH_FALL: begin
+                                scl_drive_low <= 1;
+                                if (bit_cnt == 0) state <= ACK2;
+                                else bit_cnt <= bit_cnt - 1;
+                            end
+                        endcase
+                    end
+                end
+
+                ACK2: begin
+                    if (phase_tick) begin
+                        case (phase)
+                            PH_SETUP: begin
+                                if (rw) sda_drive_low <= (!last_byte); // ACK if not last
+                                else sda_drive_low <= 0; // release for slave ACK
+                            end
+                            PH_RISE:  scl_drive_low <= 0;
+                            PH_SAMPLE: if (!rw) ack_error <= sda_in;
+                            PH_FALL: begin
+                                scl_drive_low <= 1;
+                                data_out <= shift_reg;
+                                state <= STOP;
+                            end
+                        endcase
+                    end
+                end
+
+                STOP: begin
+                    if (phase_tick) begin
+                        case (phase)
+                            PH_SETUP: sda_drive_low <= 1; // SDA low
+                            PH_RISE:  scl_drive_low <= 0; // release SCL
+                            PH_SAMPLE: sda_drive_low <= 0; // release SDA high while SCL high
+                            PH_FALL: begin
+                                busy <= 0;
+                                done <= 1;
+                                state <= IDLE;
+                            end
+                        endcase
+                    end
+                end
+            endcase
+        end
+    end
+
+endmodule
+
+// THIS IS I2C MASTE SLAVE CODE
+
+`timescale 1ns/1ps
+
+module spi_top #(parameter DATA_WIDTH = 8, parameter CLK_DIV = 4)(
+    input wire clk,
+    input wire rst_n,
+    input wire start,
+    input wire [DATA_WIDTH-1:0] master_tx_data,
+    input wire cpol,
+    input wire cpha,
+    output wire [DATA_WIDTH-1:0] master_rx_data,
+    output wire done
+);
+
+    // SPI wires
+    wire sclk;
+    wire mosi;
+    wire miso;
+    wire cs_n;
+
+    // -------------------------
+    // MASTER INSTANCE
+    // -------------------------
+    spi_master #(.DATA_WIDTH(DATA_WIDTH), .CLK_DIV(CLK_DIV)) master (
+        .clk(clk),
+        .rst_n(rst_n),
+        .start(start),
+        .tx_data(master_tx_data),
+        .cpol(cpol),
+        .cpha(cpha),
+        .busy(),
+        .done(done),
+        .sclk(sclk),
+        .mosi(mosi),
+        .miso(miso),
+        .cs_n(cs_n),
+        .rx_data(master_rx_data)
+    );
+
+    // -------------------------
+    // SLAVE INSTANCE
+    // -------------------------
+    spi_slave #(.DATA_WIDTH(DATA_WIDTH)) slave (
+        .rst_n(rst_n),
+        .sclk(sclk),
+        .mosi(mosi),
+        .miso(miso),
+        .cs_n(cs_n),
+        .cpol(cpol),
+        .cpha(cpha)
+    );
+
+endmodule
+
+
+// ==========================================================
+// ===================== SPI MASTER ==========================
+// ==========================================================
+module spi_master #(parameter DATA_WIDTH = 8, parameter CLK_DIV = 4)(
+    input wire clk, rst_n, start,
+    input wire [DATA_WIDTH-1:0] tx_data,
+    input wire cpol, cpha,
+    output reg busy, done,
+    output reg sclk, mosi,
+    input wire miso,
+    output reg cs_n,
+    output reg [DATA_WIDTH-1:0] rx_data
+);
+
+    reg miso_sync1, miso_sync2;
+    always @(posedge clk) begin
+        miso_sync1 <= miso;
+        miso_sync2 <= miso_sync1;
+    end
+
+    reg [$clog2(CLK_DIV)-1:0] clk_cnt;
+    reg sclk_int;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            clk_cnt <= 0;
+            sclk_int <= 0;
+        end else if (busy) begin
+            if (clk_cnt == CLK_DIV-1) begin
+                clk_cnt <= 0;
+                sclk_int <= ~sclk_int;
+            end else
+                clk_cnt <= clk_cnt + 1;
+        end else begin
+            sclk_int <= cpol;
+            clk_cnt <= 0;
+        end
+    end
+
+    always @(*) sclk = sclk_int;
+
+    reg sclk_d;
+    always @(posedge clk) sclk_d <= sclk_int;
+
+    wire rising  = (sclk_int & ~sclk_d);
+    wire falling = (~sclk_int & sclk_d);
+
+    wire sample_edge = (cpha==0) ? (cpol==0 ? rising : falling)
+                                : (cpol==0 ? falling : rising);
+
+    wire shift_edge  = (cpha==0) ? (cpol==0 ? falling : rising)
+                                : (cpol==0 ? rising : falling);
+
+    localparam IDLE=0, LOAD=1, TRANSFER=2, DONE=3;
+    reg [1:0] state;
+
+    reg [DATA_WIDTH-1:0] tx_shift, rx_shift;
+    reg [$clog2(DATA_WIDTH):0] bit_cnt;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            state<=IDLE; cs_n<=1; busy<=0; done<=0;
+            mosi<=0; rx_data<=0; bit_cnt<=0;
+        end else begin
+            done<=0;
+
+            case(state)
+                IDLE: begin
+                    cs_n<=1; busy<=0;
+                    if(start) state<=LOAD;
+                end
+
+                LOAD: begin
+                    cs_n<=0; busy<=1;
+                    tx_shift<=tx_data; rx_shift<=0; bit_cnt<=0;
+                    state<=TRANSFER;
+                end
+
+                TRANSFER: begin
+                    if(shift_edge) begin
+                        mosi <= tx_shift[DATA_WIDTH-1];
+                        tx_shift <= {tx_shift[DATA_WIDTH-2:0],1'b0};
+                    end
+
+                    if(sample_edge) begin
+                        rx_shift <= {rx_shift[DATA_WIDTH-2:0], miso_sync2};
+                        if(bit_cnt==DATA_WIDTH-1) state<=DONE;
+                        bit_cnt<=bit_cnt+1;
+                    end
+                end
+
+                DONE: begin
+                    cs_n<=1; busy<=0; done<=1;
+                    rx_data<=rx_shift;
+                    state<=IDLE;
+                end
+            endcase
+        end
+    end
+endmodule
+
+
+// ==========================================================
+// ===================== SPI SLAVE ===========================
+// ==========================================================
+module spi_slave #(parameter DATA_WIDTH = 8)(
+    input wire rst_n,
+    input wire sclk,
+    input wire mosi,
+    output reg miso,
+    input wire cs_n,
+    input wire cpol,
+    input wire cpha
+);
+
+    reg sclk_d;
+    always @(posedge sclk or negedge rst_n)
+        if (!rst_n) sclk_d <= 0;
+        else sclk_d <= sclk;
+
+    wire rising  = (sclk & ~sclk_d);
+    wire falling = (~sclk & sclk_d);
+
+    wire sample_edge = (cpha==0) ? (cpol==0 ? rising : falling)
+                                : (cpol==0 ? falling : rising);
+
+    wire shift_edge  = (cpha==0) ? (cpol==0 ? falling : rising)
+                                : (cpol==0 ? rising : falling);
+
+    reg [DATA_WIDTH-1:0] shift_reg;
+    reg [$clog2(DATA_WIDTH):0] bit_cnt;
+
+    always @(posedge sclk or negedge rst_n) begin
+        if (!rst_n) begin
+            shift_reg <= 0;
+            bit_cnt   <= 0;
+            miso      <= 0;
+        end else if (!cs_n) begin
+
+            if (sample_edge) begin
+                shift_reg <= {shift_reg[DATA_WIDTH-2:0], mosi};
+                bit_cnt   <= bit_cnt + 1;
+            end
+
+            if (shift_edge) begin
+                miso <= shift_reg[DATA_WIDTH-1];
+            end
+
+        end else begin
+            bit_cnt <= 0;
+        end
+    end
+
+endmodule
+//this is spi_core code
